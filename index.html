@@ -183,8 +183,8 @@
             // Each state lists the visible word pieces, left to right.
             const STATES = [["cafe", "year"], ["studio", "year"], ["dada", "studio"]];
             // When each state starts (ms after the font is ready), then when the note appears.
-            const TIMES = [100, 1300, 2700];
-            const NOTE_AT = 3500;
+            const TIMES = [100, 1300, 2600];
+            const NOTE_AT = 3800;
 
             const mark = document.getElementById("mark");
             const note = document.getElementById("note");
@@ -195,7 +195,7 @@
             let timers = [];
 
             // Left edge (px) of each visible piece, with the whole name centred.
-            function layout(state) {
+            function centred(state) {
                 const names = STATES[state];
                 const total = names.reduce((w, n) => w + segs[n].offsetWidth, 0);
                 let x = (mark.clientWidth - total) / 2;
@@ -207,10 +207,22 @@
                 return pos;
             }
 
-            // Leaving pieces fade fast so they never sit on top of the pieces moving in.
+            // "1941" keeps one spot through cafe1941 and studio1941, so only the word in front of it
+            // changes. The spot sits halfway between where each of those two names would be centred.
+            function layout(state) {
+                if (state === STATES.length - 1) return centred(state);
+                const yearX = (centred(0).year + centred(1).year) / 2;
+                const front = STATES[state][0];
+                return { [front]: yearX - segs[front].offsetWidth, year: yearX };
+            }
+
+            // Leaving pieces fade fast and stay where they are. In the last change "studio" moves
+            // only after "1941" has faded, and "dada-" comes in once "studio" has made room.
+            const EXIT = "transform .5s var(--ease), opacity .2s linear";
             const MOVE = "transform .7s var(--ease), opacity .5s ease";
             const ENTER = "transform .7s var(--ease), opacity .45s ease .1s";
-            const EXIT = "transform .6s var(--ease), opacity .22s linear";
+            const MOVE_LATE = "transform .7s var(--ease) .2s, opacity .5s ease";
+            const ENTER_LATE = "transform .6s var(--ease) .55s, opacity .45s ease .6s";
 
             // transition "none" jumps straight to the new spot.
             function place(el, x, dy, opacity, transition) {
@@ -223,25 +235,22 @@
             function show(state, animate) {
                 const pos = layout(state);
                 const prev = current >= 0 ? layout(current) : {};
-                // How far the piece that stays is moving, so "1941" can travel with "studio".
-                const kept = Object.keys(pos).find((n) => n in prev);
-                const shift = kept ? pos[kept] - prev[kept] : 0;
+                const late = state === STATES.length - 1;
                 for (const [name, el] of Object.entries(segs)) {
                     if (name in pos) {
                         if (!animate) {
                             place(el, pos[name], 0, 1, "none");
                         } else if (name in prev) {
-                            place(el, pos[name], 0, 1, MOVE);
+                            place(el, pos[name], 0, 1, late ? MOVE_LATE : MOVE);
                         } else {
                             // Entering: "dada-" slides in from the left, other pieces rise from below.
                             if (name === "dada") place(el, pos[name] - 24, 0, 0, "none");
                             else place(el, pos[name], 0.45, 0, "none");
-                            place(el, pos[name], 0, 1, ENTER);
+                            place(el, pos[name], 0, 1, late ? ENTER_LATE : ENTER);
                         }
                     } else if (name in prev) {
-                        // Leaving: "cafe" lifts away, "1941" drops away while moving with "studio".
-                        const x = prev[name] + (name === "year" ? shift : 0);
-                        place(el, x, name === "cafe" ? -0.45 : 0.45, 0, animate ? EXIT : "none");
+                        // Leaving: "cafe" lifts away, "1941" drops away.
+                        place(el, prev[name], name === "cafe" ? -0.45 : 0.45, 0, animate ? EXIT : "none");
                     }
                 }
                 current = state;
